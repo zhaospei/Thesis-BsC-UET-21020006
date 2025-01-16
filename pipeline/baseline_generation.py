@@ -15,6 +15,7 @@ import dataeval.w_humaneval as human_eval
 import dataeval.w_mbpp as mbpp
 import dataeval.w_ds1000 as ds1000
 import dataeval.w_repoeval as repo_eval
+import dataeval.w_deveval as dev_eval
 
 def get_dataset_fn(data_name):
     if data_name == 'human_eval':
@@ -25,6 +26,8 @@ def get_dataset_fn(data_name):
         return ds1000.get_dataset
     if data_name == 'repo_eval':
         return repo_eval.get_dataset
+    if data_name == 'dev_eval':
+        return dev_eval.get_dataset
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -62,18 +65,13 @@ random.seed(37)
 # Generate unique numbers within the range
 train_task_ids = random.sample(range(11, 510), 450)
 
-df = pd.read_parquet("/drive2/tuandung/WCODELLM/LFCLF_embedding_ds1000_deepseek-ai_deepseek-coder-1.3b-instruct_24_label_cleaned_code.parquet")
+# df = pd.read_parquet("/drive2/tuandung/WCODELLM/LFCLF_embedding_ds1000_deepseek-ai_deepseek-coder-1.3b-instruct_24_label_cleaned_code.parquet")
 
-task_id_list = df['task_id'].unique().tolist()
-import random
-random.seed(42)
-sample_size = int(0.9 * len(task_id_list))
-# Generate unique numbers within the range
-train_task_ids = random.sample(task_id_list, sample_size)
-df_train = df[df['task_id'].isin(train_task_ids)]
-df_test = df[~df['task_id'].isin(train_task_ids)]
-# df_test = df
-df_test_dict = df_test.to_dict(orient='records')
+with open('/drive2/tuandung/WCODELLM/benchmark/DevEval/data/train_project_ids.txt', 'r') as f:
+    train_project_ids = f.readlines()
+# df_test = df[~df['task_id'].isin(train_task_ids)]
+# # df_test = df
+# df_test_dict = df_test.to_dict(orient='records')
 
 def build_prompt(Query):
     return f"Are you capable of providing an accurate response to the query given below? Respond only to this question with ’yes’ or ’no’ and do not address the content of the query itself. The query in block [Query] and [/Query] and your respone after 'Answer'. \n[Query]\n{Query}\n[/Query] \n\nAre you capable of providing an accurate response to the query given above without more information? Respond only to this question with yes or no. \nAnswer: "
@@ -85,34 +83,42 @@ def build_prompt_with_output(Query, Respone):
     return f"The query in block [Query] and [/Query] and your respone in block [Respone] and [/Respone]. \n[Query]\n{Query}\n[/Query] \n[Respone]\n{Respone}\n[/Respone]\n\nIs your respone is accurate to query? Answer only to this question with yes or no. \nAnswer: "
 
 # problem_file = '/drive2/tuandung/WCODELLM/benchmark/HumanEval/data/humaneval-python.jsonl'
-problem_file = '/drive2/tuandung/WCODELLM/benchmark/DS_1000/data/ds1000.jsonl'
-# sequences = pd.read_pickle(continue_from)
-examples = [json.loads(x) for x in open(problem_file) if x.strip()]
+# problem_file = '/drive2/tuandung/WCODELLM/benchmark/DS_1000/data/ds1000.jsonl'
+# problem_file = '/drive2/tuandung/WCODELLM/benchmark/DevEval/data/completion_dataset.jsonl'
+# # sequences = pd.read_pickle(continue_from)
+# examples = [json.loads(x) for x in open(problem_file) if x.strip()]
 # mbpp_ds = get_dataset_fn('mbpp')(tokenizer, language='python', instruction=True)
+dev_eval_ds = get_dataset_fn('dev_eval')(tokenizer, language='python', instruction=True)
 
+namespace_to_project = {}
+# project_counts = {}
+data_file = '/drive2/tuandung/WCODELLM/benchmark/DevEval/data/data_clean.jsonl'
+with open(data_file, 'r') as f:
+    for line in f:
+        js = json.loads(line)
+        namespace = js['namespace']
+        ns = js['project_path']
+        # project_counts[ns] = project_counts.get(ns, 0) + 1
+        namespace_to_project[namespace] = ns
+        
 # Apply padding on the left since we are doing generation
 padding_side_default = tokenizer.padding_side
 tokenizer.padding_side = "left"
 
-for test_dict in df_test_dict:
-    # for mbpp_example in mbpp_ds:
-        # if test_dict['task_id'] == mbpp_example['task_id']:
-            # test_dict['prompt'] = mbpp_example['prompt']
-    test_dict['prompt'] = examples[test_dict['task_id']]['prompt']
-            # break
-
 baseline_prompts = []
-
-for test_dict in tqdm(df_test_dict):
+dev_eval_ds = list(dev_eval_ds)[:5]
+for test_dict in tqdm(dev_eval_ds):
+    if namespace_to_project[test_dict['task_id']] in train_project_ids:
+        continue
     prompt = test_dict['prompt']
-    respone = test_dict['cleaned_code']
+    # respone = test_dict['cleaned_code']
 #     prompt = '''
 # Please continue to complete the function. You are not allowed to modify the given code and do the completion only. Please return all completed function in a codeblock. Here is the given code to do completion:
 # ```{}
 # {}
 # ```
 # '''.strip().format('python', test_dict['prompt'].strip())
-    baseline_prompts.append(build_prompt_with_output(prompt, respone))
+    baseline_prompts.append((test_dict['task_id'], build_prompt(prompt)))
 
 # baseline_prompts = [build_prompt(prompt) for prompt in df_test_dict['prompt']]
 
@@ -132,9 +138,10 @@ generation_config = {
 generated_texts = []
 
 # with tqdm(total=len(df_test)) as pbar:
-for prompt in tqdm(baseline_prompts):
+for prompt_tuple in tqdm(baseline_prompts):
     # prompt = build_prompt(p)
-    print(prompt)
+    # print(prompt)
+    task_id, prompt = prompt_tuple
     # tokenized_prompt = tokenizer(prompt, padding=True,
     #                                 return_tensors="pt").to("cuda")
     inputs = tokenizer.apply_chat_template(
@@ -147,28 +154,19 @@ for prompt in tqdm(baseline_prompts):
             # **tokenized_prompt,
             **generation_config
         )
-    # print(outputs)
-    # print(len(tokenized_prompt['input_ids']))
-    # print(outputs[0][len(tokenized_prompt['input_ids']):])
-    # generated_text = tokenizer.decode(outputs[0][len(tokenized_prompt['input_ids'][0]):], skip_special_tokens=True)
     generated_text = tokenizer.decode(outputs[0][len(inputs[0]):], skip_special_tokens=True)
     # pbar.update(1)
     print(generated_text)
-    generated_texts.append(generated_text)
+    label = 0
+    if 'yes' in generated_text or 'Yes' in generated_text:
+        label = 1
+        
+    generated_texts.append((task_id, label, generated_text))
 
-from sklearn.metrics import accuracy_score
-
-true_labels = [test_dict['label'] for test_dict in df_test_dict]
-
-predictions = []
-for text in generated_texts:
-    if 'yes' in text or 'Yes' in text:
-        predictions.append(1)
-    else:
-        predictions.append(0)
-
-print(sum(predictions))
-
-accuracy = accuracy_score(true_labels, predictions)
-from sklearn.metrics import classification_report
-print(classification_report(true_labels, predictions))
+with open(f'output/{model_name}_dev_eval_baseline.jsonl', 'w') as f:
+    for task_id, label, generated_text in generated_texts:
+        f.write(json.dumps({
+            'task_id': task_id,
+            'label': label,
+            'generated_text': generated_text
+        }) + '\n')
