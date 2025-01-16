@@ -65,3 +65,4 @@ vastai/
 vastai/*.zip
 !benchmark/*/*.parquet
 jaist
+!benchmark/DevEval/data/train_project_ids.txt
