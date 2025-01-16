@@ -76,12 +76,12 @@ import os
 from benchmark.MBPP.human_eval.evaluation import evaluate_functional_correctness_each_sample
 
 data_root = "/drive2/tuandung/WCODELLM/benchmark/MBPP/data"
-continue_from = '/drive2/tuandung/WCODELLM/jaist/magic_coder/LFCLF_embedding_mbpp_ise-uiuc_Magicoder-S-DS-6.7B_1.parquet'
+continue_from = '/drive2/tuandung/WCODELLM/jaist/mbpp_rerun/LFCLF_embedding_mbpp_deepseek-ai_deepseek-coder-6.7b-instruct_32.parquet'
 kwargs_handlers = [DistributedDataParallelKwargs(find_unused_parameters=True)]
 accelerator = Accelerator(mixed_precision="bf16", kwargs_handlers=kwargs_handlers)
-model_name = 'codellama/CodeLlama-7b-Instruct-hf'
+model_name = 'deepseek-ai/deepseek-coder-6.7b-instruct'
 # model_name = 'Qwen/Qwen2.5-Coder-3B-Instruct'
-model_name = 'ise-uiuc/Magicoder-S-DS-6.7B'
+# model_name = 'ise-uiuc/Magicoder-S-DS-6.7B'
 tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
 # sequences = pd.read_pickle(continue_from)
 sequences = pd.read_parquet(continue_from).to_dict(orient='records')
