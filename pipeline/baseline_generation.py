@@ -68,7 +68,7 @@ train_task_ids = random.sample(range(11, 510), 450)
 # df = pd.read_parquet("/drive2/tuandung/WCODELLM/LFCLF_embedding_ds1000_deepseek-ai_deepseek-coder-1.3b-instruct_24_label_cleaned_code.parquet")
 
 with open('/drive2/tuandung/WCODELLM/benchmark/DevEval/data/train_project_ids.txt', 'r') as f:
-    train_project_ids = f.readlines()
+    train_project_ids = f.read().splitlines()
 # df_test = df[~df['task_id'].isin(train_task_ids)]
 # # df_test = df
 # df_test_dict = df_test.to_dict(orient='records')
@@ -106,8 +106,11 @@ padding_side_default = tokenizer.padding_side
 tokenizer.padding_side = "left"
 
 baseline_prompts = []
-dev_eval_ds = list(dev_eval_ds)[:5]
+dev_eval_ds = list(dev_eval_ds)[:1]
+print(train_project_ids)
 for test_dict in tqdm(dev_eval_ds):
+    print(test_dict)
+    print(namespace_to_project[test_dict['task_id']])
     if namespace_to_project[test_dict['task_id']] in train_project_ids:
         continue
     prompt = test_dict['prompt']
@@ -138,6 +141,7 @@ generation_config = {
 generated_texts = []
 
 # with tqdm(total=len(df_test)) as pbar:
+print(len(baseline_prompts))
 for prompt_tuple in tqdm(baseline_prompts):
     # prompt = build_prompt(p)
     # print(prompt)
