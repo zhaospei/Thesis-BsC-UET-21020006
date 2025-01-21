@@ -80,10 +80,7 @@ continue_from = '/drive2/tuandung/WCODELLM/vastai/deepseekcoder-6.7b-instruct/mb
 kwargs_handlers = [DistributedDataParallelKwargs(find_unused_parameters=True)]
 accelerator = Accelerator(mixed_precision="bf16", kwargs_handlers=kwargs_handlers)
 model_name = 'deepseek-ai/deepseek-coder-6.7b-instruct'
-# model_name = 'Qwen/Qwen2.5-Coder-3B-Instruct'
-# model_name = 'ise-uiuc/Magicoder-S-DS-6.7B'
 tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-# sequences = pd.read_pickle(continue_from)
 sequences = pd.read_parquet(continue_from).to_dict(orient='records')
 print(f'Loaded {len(sequences)} indices')
 batch_size = 8
