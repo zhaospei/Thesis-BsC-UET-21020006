@@ -33,7 +33,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--model",
     type=str,
-    default="deepseek-ai/deepseek-coder-1.3b-instruct",
+    default="codellama/CodeLlama-7b-hf",
     help="which results to run",
 )
 parser.add_argument(
@@ -67,14 +67,14 @@ train_task_ids = random.sample(range(11, 510), 450)
 
 # df = pd.read_parquet("/drive2/tuandung/WCODELLM/LFCLF_embedding_ds1000_deepseek-ai_deepseek-coder-1.3b-instruct_24_label_cleaned_code.parquet")
 
-with open('/drive2/tuandung/WCODELLM/benchmark/DevEval/data/train_project_ids.txt', 'r') as f:
-    train_project_ids = f.readlines()
+with open('/home/trang-n/WCODELLM_MULTILANGUAGE/benchmark/DevEval/data/train_project_ids.txt', 'r') as f:
+    train_project_ids = f.read().splitlines()
 # df_test = df[~df['task_id'].isin(train_task_ids)]
 # # df_test = df
 # df_test_dict = df_test.to_dict(orient='records')
 
 def build_prompt(Query):
-    return f"Are you capable of providing an accurate response to the query given below? Respond only to this question with ’yes’ or ’no’ and do not address the content of the query itself. The query in block [Query] and [/Query] and your respone after 'Answer'. \n[Query]\n{Query}\n[/Query] \n\nAre you capable of providing an accurate response to the query given above without more information? Respond only to this question with yes or no. \nAnswer: "
+    return f"Are you capable of providing an accurate response to the query given below? Respond only to this question with ’yes’ or ’no’ and do not address the content of the query itself. The query in block [Query] and [/Query] and your respone after 'Answer'. \n[Query]\n{Query}\n[/Query] \n\nAre you capable of providing an accurate response to the query given above? Respond only to this question with yes or no. \nAnswer: "
 # \n\nQuery: Write a function to find the similar elements from the given two tuple lists. \nAnswer: yes
 # repoeval_ds = repo_eval.get_dataset(tokenizer, "python", sft=False, instruction=True)
 problem_file = '/drive2/tuandung/WCODELLM/benchmark/MBPP/data/mbpp.jsonl'
@@ -92,7 +92,7 @@ dev_eval_ds = get_dataset_fn('dev_eval')(tokenizer, language='python', instructi
 
 namespace_to_project = {}
 # project_counts = {}
-data_file = '/drive2/tuandung/WCODELLM/benchmark/DevEval/data/data_clean.jsonl'
+data_file = '/home/trang-n/WCODELLM_MULTILANGUAGE/benchmark/DevEval/data/data_clean.jsonl'
 with open(data_file, 'r') as f:
     for line in f:
         js = json.loads(line)
@@ -106,7 +106,7 @@ padding_side_default = tokenizer.padding_side
 tokenizer.padding_side = "left"
 
 baseline_prompts = []
-dev_eval_ds = list(dev_eval_ds)[:5]
+# dev_eval_ds = list(dev_eval_ds)[:5]
 for test_dict in tqdm(dev_eval_ds):
     if namespace_to_project[test_dict['task_id']] in train_project_ids:
         continue
@@ -163,7 +163,7 @@ for prompt_tuple in tqdm(baseline_prompts):
         
     generated_texts.append((task_id, label, generated_text))
 
-with open(f'output/{model_name}_dev_eval_baseline.jsonl', 'w') as f:
+with open(f'output/{model_name}_test_no_more_info_dev_eval_baseline.jsonl', 'w') as f:
     for task_id, label, generated_text in generated_texts:
         f.write(json.dumps({
             'task_id': task_id,
