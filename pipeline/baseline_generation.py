@@ -33,7 +33,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--model",
     type=str,
-    default="codellama/CodeLlama-7b-hf",
+    default="deepseek-ai/deepseek-coder-1.3b-instruct",
     help="which results to run",
 )
 parser.add_argument(
@@ -69,6 +69,10 @@ train_task_ids = random.sample(range(11, 510), 450)
 
 with open('/home/trang-n/WCODELLM_MULTILANGUAGE/benchmark/DevEval/data/train_project_ids.txt', 'r') as f:
     train_project_ids = f.read().splitlines()
+# with open('/home/trang-n/WCODELLM_MULTILANGUAGE/benchmark/MBPP/data/mbpp_test_task_ids.txt', 'r') as f:
+#     test_project_ids = f.read().splitlines()
+
+# test_project_ids = [int(x) for x in test_project_ids]
 # df_test = df[~df['task_id'].isin(train_task_ids)]
 # # df_test = df
 # df_test_dict = df_test.to_dict(orient='records')
@@ -89,6 +93,7 @@ def build_prompt_with_output(Query, Respone):
 # examples = [json.loads(x) for x in open(problem_file) if x.strip()]
 # mbpp_ds = get_dataset_fn('mbpp')(tokenizer, language='python', instruction=True)
 dev_eval_ds = get_dataset_fn('dev_eval')(tokenizer, language='python', instruction=True)
+# mbpp_eval_ds = get_dataset_fn('mbpp')(tokenizer, language='python', instruction=True)
 
 namespace_to_project = {}
 # project_counts = {}
@@ -108,16 +113,19 @@ tokenizer.padding_side = "left"
 baseline_prompts = []
 # dev_eval_ds = list(dev_eval_ds)[:5]
 for test_dict in tqdm(dev_eval_ds):
+    # print(test_dict)
+    # print(namespace_to_project[test_dict['task_id']])
     if namespace_to_project[test_dict['task_id']] in train_project_ids:
         continue
+    # if test_dict['task_id'] in test_project_ids:
     prompt = test_dict['prompt']
-    # respone = test_dict['cleaned_code']
-#     prompt = '''
-# Please continue to complete the function. You are not allowed to modify the given code and do the completion only. Please return all completed function in a codeblock. Here is the given code to do completion:
-# ```{}
-# {}
-# ```
-# '''.strip().format('python', test_dict['prompt'].strip())
+        # respone = test_dict['cleaned_code']
+    #     prompt = '''
+    # Please continue to complete the function. You are not allowed to modify the given code and do the completion only. Please return all completed function in a codeblock. Here is the given code to do completion:
+    # ```{}
+    # {}
+    # ```
+    # '''.strip().format('python', test_dict['prompt'].strip())
     baseline_prompts.append((test_dict['task_id'], build_prompt(prompt)))
 
 # baseline_prompts = [build_prompt(prompt) for prompt in df_test_dict['prompt']]
@@ -138,6 +146,7 @@ generation_config = {
 generated_texts = []
 
 # with tqdm(total=len(df_test)) as pbar:
+print(len(baseline_prompts))
 for prompt_tuple in tqdm(baseline_prompts):
     # prompt = build_prompt(p)
     # print(prompt)

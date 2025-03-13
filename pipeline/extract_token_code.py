@@ -110,7 +110,8 @@ def process_lfclf():
                 # print("gen:", gen)
                 # print("clean_generation_decoded:", clean_generation_decoded)
                 print(f'Cannot find clean generation range for {task_id_path}')
-                clean_generations_range.append((getGenerationRange(generated_ids.tolist(), tokenizer), has_error))
+                start_ind, end_ind = getGenerationRange(generated_ids.tolist(), tokenizer)
+                clean_generations_range.append((start_ind, end_ind, has_error))
             else:
                 clean_generations_range.append((start_ind, end_ind, has_error))
 
@@ -178,29 +179,32 @@ def process_lfclf():
                 start_code_ind = max(0, start_code_ind)
                 end_code_ind = end_code_ind - 1
                 
-                first_token_embedding = layer_embedding[start_ind].tolist()
-                last_token_embedding = layer_embedding[end_ind - 1].tolist()
-                first_token_code_embedding = layer_embedding[start_code_ind].tolist()
-                last_token_code_embedding = layer_embedding[end_code_ind - 1].tolist()
+                try:
+                    first_token_embedding = layer_embedding[start_ind].tolist()
+                    last_token_embedding = layer_embedding[end_ind - 1].tolist()
+                    first_token_code_embedding = layer_embedding[start_code_ind].tolist()
+                    last_token_code_embedding = layer_embedding[end_code_ind - 1].tolist()
 
-                results = results._append({
-                    "task_id": task_id, 
-                    "completion_id": completion_id,
-                    "num_tokens": num_tokens,
-                    "generation": generation, 
-                    "first_token_embedding": first_token_embedding, 
-                    "last_token_embedding": last_token_embedding,
-                    "first_token_code_embedding": first_token_code_embedding,
-                    "last_token_code_embedding": last_token_code_embedding,
-                    "has_error": has_error,
-                    "extracted_code": extracted_code,
-                    "first_code_index": start_code_ind,
-                    "last_code_index" : end_code_ind - 1,
-                    "first_index": start_ind,
-                    "last_index": end_ind - 1,
-                    "generated_ids": generated_ids.tolist()
-                }, 
-                ignore_index=True)
+                    results = results._append({
+                        "task_id": task_id, 
+                        "completion_id": completion_id,
+                        "num_tokens": num_tokens,
+                        "generation": generation, 
+                        "first_token_embedding": first_token_embedding, 
+                        "last_token_embedding": last_token_embedding,
+                        "first_token_code_embedding": first_token_code_embedding,
+                        "last_token_code_embedding": last_token_code_embedding,
+                        "has_error": has_error,
+                        "extracted_code": extracted_code,
+                        "first_code_index": start_code_ind,
+                        "last_code_index" : end_code_ind - 1,
+                        "first_index": start_ind,
+                        "last_index": end_ind - 1,
+                        "generated_ids": generated_ids.tolist()
+                    }, 
+                    ignore_index=True)
+                except:
+                    print('Cant extract layer embedding')
 
         print(f'Found {found_sample} / {len(dataset)}')
         model_name = args.model_name.replace('/', '_')
