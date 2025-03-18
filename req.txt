@@ -8,3 +8,5 @@ rouge_score
 selfcheckgpt
 numpy<2.0
 bitsandbytes
+tree_sitter==0.21.3
+tree_sitter_python==0.23.0

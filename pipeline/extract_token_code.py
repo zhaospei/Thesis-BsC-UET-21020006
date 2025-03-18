@@ -593,6 +593,132 @@ def process_min_prob_token_line():
     
     return
 
+def process_operator_token():
+    # import tree_sitter_python as tspython
+    from tree_sitter import Language, Parser
+    code_parser = Parser()
+    PY_LANGUAGE = Language('../build/my-languages.so', 'python')
+    # PY_LANGUAGE = Language(tspython.language())
+    # code_parser = Parser(PY_LANGUAGE)
+    code_parser.set_language(PY_LANGUAGE)
+    tokenizer = models.load_tokenizer(args.model_name)
+    if 'chat' or 'instruct' in args.model_name.lower():
+        instruction = True
+    else:
+        instruction = False
+    dataset = get_dataset_fn(args.dataset)(tokenizer, language=args.language, instruction=instruction)
+    dataset_egc = extract_generation_code_fun(args.dataset)
+    # dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False)
+    
+    output_dir = args.generate_dir.replace('temp', 'output')
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    last_line_token_ids_list_all = {}
+    
+    for example in tqdm.tqdm(dataset, total=len(dataset)):
+        has_error = False
+        task_id_path =  str(example['task_id']).replace('/','_').replace('[','_').replace(']','_')
+        if args.dataset == 'mbpp' or args.dataset == 'ds1000':
+            task_id_path = f'tensor({task_id_path})'
+        if args.dataset == 'dev_eval':
+            function_name = example['task_id'].split('.')[-1]
+        elif args.dataset == 'human_eval':
+            function_name = get_function_name(example["original_prompt"].strip(), args.language)
+        else:
+            # raise ValueError(f"Not support dataset {args.dataset} yet.")
+            function_name = None
+            # function_name = get_function_name(, args.language)
+        task_generation_seqs_path = f'generation_sequences_output_{task_id_path}.pkl'
+        task_generation_seqs_path = os.path.join(args.generate_dir, task_generation_seqs_path)
+        # print(task_generation_seqs_path)
+        if not os.path.exists(task_generation_seqs_path):
+            print(f'File {task_id_path} not found. Skipping...')
+            continue
+        
+        # print(f'Found {task_id_path}. Processing...')
+        
+        with open(task_generation_seqs_path, 'rb') as f:
+            task_generation_seqs = pickle.load(f)
+        
+        last_line_token_ids_list = []
+        for generated_ids in task_generation_seqs['generations_ids']:
+            gen = tokenizer.decode(generated_ids, skip_special_tokens=True)
+            clean_generation_decoded = dataset_egc(example, gen, args.language)
+            if function_name is None:
+                function_name = get_function_name(clean_generation_decoded, args.language)
+            last_line_token_ids = getParserSpecicalToken(
+                generated_ids.tolist(), 
+                clean_generation_decoded, 
+                tokenizer, 
+                code_parser, 
+                function_name, 
+                special_tokens=PYTHON_ALL_OPERATORS
+            )
+            print(last_line_token_ids)
+            last_line_token_ids_list.append(last_line_token_ids)
+
+        last_line_token_ids_list_all[task_id_path] = last_line_token_ids_list
+    
+    for layer in args.layers:
+        print(f'Processing layer {layer}')
+        results = pd.DataFrame(columns=[
+            "task_id", 
+            "completion_id",
+            "generation", 
+            "generated_ids",
+            "last_line_token_embeddings"
+        ])
+        found_sample = 0
+        for example in tqdm.tqdm(dataset, total=len(dataset)):
+            task_id_path =  str(example['task_id']).replace('/','_').replace('[','_').replace(']','_')
+            if args.dataset == 'mbpp' or args.dataset == 'ds1000':
+                task_id_path = f'tensor({task_id_path})'
+            task_generation_seqs_path = f'generation_sequences_output_{task_id_path}.pkl'
+            task_generation_seqs_path = os.path.join(args.generate_dir, task_generation_seqs_path)
+            if not os.path.exists(task_generation_seqs_path):
+                continue
+            with open(task_generation_seqs_path, 'rb') as f:
+                task_generation_seqs = pickle.load(f)
+            found_sample += 1
+            last_line_token_ids_list = last_line_token_ids_list_all[task_id_path]
+            task_embedding_path = f'all_token_embedding_{task_id_path}_{layer}.pkl'
+            task_embedding_path = os.path.join(args.generate_dir, task_embedding_path)
+            if not os.path.exists(task_embedding_path):
+                print(f'File {task_id_path} {layer} not found. Skipping...')
+                continue
+            
+            with open(task_embedding_path, 'rb') as f:
+                task_embedding = pickle.load(f)
+            
+            for j in range(len(task_generation_seqs['generations'])):
+                task_id = example['task_id']
+                completion_id = str(task_id) + '_' + str(j)
+                generation = task_generation_seqs["generations"][j]
+                generated_ids = task_generation_seqs["generations_ids"][j]
+                last_line_token_ids = last_line_token_ids_list[j]
+                layer_embedding = task_embedding['layer_embeddings'][j]
+                last_line_token_embeddings = []
+                for id in last_line_token_ids:
+                    # chosen_id = max(0, id - 1)
+                    chosen_id = min(len(layer_embedding) - 1, id + 1)
+                    last_line_token_embeddings.append(layer_embedding[chosen_id].tolist())
+                results = results._append({
+                    "task_id": task_id, 
+                    "completion_id": completion_id,
+                    "generation": generation,
+                    "generated_ids": generated_ids.tolist(),
+                    "last_line_token_embeddings": last_line_token_embeddings,
+                    "last_line_token_ids": last_line_token_ids
+                }, 
+                ignore_index=True)
+        
+        print(f'Found {found_sample} / {len(dataset)}')
+        model_name = args.model_name.replace('/', '_')
+        results.to_parquet(os.path.join(output_dir, f'operators_token_embedding_{args.dataset}_{model_name}_{layer}.parquet'))
+    
+    return
+
 if __name__ == '__main__':
     if args.type == 'LFCLF':
         process_lfclf()
@@ -602,5 +728,7 @@ if __name__ == '__main__':
         process_min_prob_token()
     elif args.type == 'min_prob_token_line':
         process_min_prob_token_line()
+    elif args.type == 'operator_token':
+        process_operator_token()
     else:
         raise ValueError(f"Unknown type {args.type}")

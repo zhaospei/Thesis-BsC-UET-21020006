@@ -6,9 +6,38 @@ from rouge_score import rouge_scorer
 from sentence_transformers import util
 import heapq
 import textwrap
+from pygtrie import Trie
+
+PYTHON_ALL_OPERATORS = [
+    # Arithmetic Operators
+    '+', '-', '*', '/', '//', '%', '**',
+
+    # Comparison Operators
+    '==', '!=', '>', '<', '>=', '<=',
+
+    # Logical Operators
+    'and', 'or', 'not',
+
+    # Bitwise Operators
+    '&', '|', '^', '~', '<<', '>>',
+
+    # Assignment Operators
+    '=', '+=', '-=', '*=', '/=', '//=', '%=', '**=',
+    '&=', '|=', '^=', '<<=', '>>=',
+
+    # Membership Operators
+    'in', 'not in',
+
+    # Identity Operators
+    'is', 'is not',
+
+    # Special Operators
+    'if else', ':=',  # Ternary and Walrus operators
+]
+
 # from selfcheckgpt.modeling_selfcheck import SelfCheckBERTScore
 
-###### 导入ROUGE评估函数计算ROUGE-L指标
+###### 导入ROUGE评估函数计算ROUGE-L指标z
 rougeEvaluator = rouge_scorer.RougeScorer(["rouge1", "rouge2", "rougeL"], use_stemmer=True)
 
 def count_indent(code):
@@ -207,6 +236,28 @@ def get_function_name(question: str, lang: str):
     func_name = func_lines[-1].split('{')[0].strip()
     func_prefix = "\n".join(func_lines[:-1])
     return func_name
+
+def getParserSpecicalToken(tokenized_generated_text, clean_text, tokenizer, parser, function_name, special_tokens=[]):
+    if function_name is None:
+        start_ind, end_ind = getCleanGenerationRange(tokenized_generated_text, clean_text, tokenizer)
+    else:
+        start_ind, end_ind = getBodyRange(tokenized_generated_text, clean_text, tokenizer, parser, function_name)
+    if start_ind is None or end_ind is None:
+        print(f"Cant extract function body token range in {function_name}")
+        start_ind = 0
+        end_ind = len(tokenized_generated_text)
+    trie = Trie({s: True for s in special_tokens})  
+
+    special_token_ids = set()
+    tokens = tokenizer.convert_ids_to_tokens(tokenized_generated_text[start_ind:end_ind])
+
+    for idx, token in enumerate(tokens, start=start_ind):
+        token = token.strip()
+        if trie.has_subtrie(token) or token in trie:
+            special_token_ids.add(idx)
+
+    special_token_ids = list(special_token_ids)
+    return special_token_ids
 
 ### 根据GT答案及生成回答计算回答的Rouge Score
 def getRouge(rouge, generations, answers):
