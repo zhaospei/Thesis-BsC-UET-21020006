@@ -61,7 +61,7 @@ print(args)
 print(args.model.replace('/', '_'))
 ml_time = int(time.time() * 1000)
 layer_name = '_'.join(str(x) for x in args.layers)
-OUTPUT_DIR = os.path.join(_settings.GENERATION_FOLDER, f'softmax_scores_{args.model.replace("/", "_")}_{args.dataset}_{args.language}_{layer_name}')
+OUTPUT_DIR = os.path.join(_settings.GENERATION_FOLDER, f'att_hidden_states_{args.model.replace("/", "_")}_{args.dataset}_{args.language}_{layer_name}')
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 logInfo = open(os.path.join(OUTPUT_DIR, "logInfo.txt"), mode="w",encoding="utf-8")
 
@@ -152,11 +152,11 @@ def get_generations(model_name:str, args, seed=1, old_sequences=None, max_num_ge
         if batch['task_id'][0] in old_sequences:
             sequences.append(old_sequences[batch['task_id'][0]])
             continue
-        if os.path.exists(os.path.join(cache_dir, f'generation_sequences_output_{task_id_path}.pkl')):
-            print(f'Generated {task_id_path}!')
-            continue # generated
-        else:
-            print(f'Processing {task_id_path} ...')
+        # if os.path.exists(os.path.join(cache_dir, f'generation_sequences_output_{task_id_path}.pkl')):
+        #     print(f'Generated {task_id_path}!')
+        #     continue # generated
+        # else:
+        #     print(f'Processing {task_id_path} ...')
         input_ids = batch['input_ids'].to(device)
         print(f"input_ids shape: {input_ids.shape}")
         if args.dataset not in passed_input_len_task  and (input_ids.shape[-1] >1000 or input_ids.shape[-1] < 9):
@@ -229,7 +229,7 @@ def get_generations(model_name:str, args, seed=1, old_sequences=None, max_num_ge
             clean_generations_range = []
             for generated_ids in generation:
                 gen = tokenizer.decode(generated_ids, skip_special_tokens=True)
-                clean_generation_decoded = dataset_egc(example, gen, args.language)
+                clean_generation_decoded = dataset_egc(batch, gen, args.language)
                 start_ind, end_ind = getCleanGenerationRange(generated_ids.tolist(), clean_generation_decoded, tokenizer)
                 if start_ind is None or end_ind is None:
                     has_error = True
@@ -239,14 +239,15 @@ def get_generations(model_name:str, args, seed=1, old_sequences=None, max_num_ge
                     start_ind, end_ind = getGenerationRange(generated_ids.tolist(), tokenizer)
                     clean_generations_range.append((start_ind, end_ind, has_error))
                 else:
+                    has_error = False
                     clean_generations_range.append((start_ind, end_ind, has_error))
 
             for layer in layers_to_process:
                 all_token_hidden_states_layer = {}
                 for ind in range(hidden_states[1][-1].shape[0]):
                     all_token_hidden_states_layer[ind + off_set] = []
-                    start_ind, end_ind, _ = clean_generations_range[ind]
-                    new_token_code_length = end_ind - start_ind
+                    start_code_ind, end_code_ind, has_error = clean_generations_range[ind]
+                    new_token_code_length = end_code_ind - start_code_ind
                     att_max_on_context = torch.zeros((new_token_code_length))
                     att_max_all = torch.zeros((new_token_code_length))
                     lookback_ratio = torch.zeros((new_token_code_length))
@@ -257,7 +258,7 @@ def get_generations(model_name:str, args, seed=1, old_sequences=None, max_num_ge
                         att_on_context = attentions[start_code_ind + i][layer - 1][ind, :, -1, :context_length].mean()
                         att_on_new_tokens = attentions[start_code_ind + i][layer - 1][ind, :, -1, context_length:].mean()
                         lookback_ratio_heads = att_on_context / (att_on_context + att_on_new_tokens)
-                        lookback_ratio[start_code_ind + i] = lookback_ratio_heads.max()
+                        lookback_ratio[i] = lookback_ratio_heads.max()
                     for i in range(new_token_length):
                         att_on_context = attentions[i][layer - 1][ind, :, -1, :context_length].mean()
                         att_on_new_tokens = attentions[i][layer - 1][ind, :, -1, context_length:].mean()
@@ -269,7 +270,20 @@ def get_generations(model_name:str, args, seed=1, old_sequences=None, max_num_ge
                     att_max_all_min_token = int(att_max_all.argmin()) + start_code_ind
                     lookback_ratio_min_token = int(lookback_ratio.argmin()) + start_code_ind
 
+                    print(new_token_length, start_code_ind, end_code_ind)
+                    cc = {
+                         "att_max_on_context_max_token": att_max_on_context_max_token,
+                        "att_max_all_max_token": att_max_all_max_token,
+                        "lookback_ratio_max_token": lookback_ratio_max_token,
+                        "att_max_on_context_min_token": att_max_on_context_min_token,
+                        "att_max_all_min_token": att_max_all_min_token,
+                        "lookback_ratio_min_token": lookback_ratio_min_token,
+                    }
+                    print(cc)
+
+
                     all_token_hidden_states_layer[ind + off_set].append({
+                        "has_error": has_error,
                         "att_max_on_context_max_token": att_max_on_context_max_token,
                         "att_max_all_max_token": att_max_all_max_token,
                         "lookback_ratio_max_token": lookback_ratio_max_token,
