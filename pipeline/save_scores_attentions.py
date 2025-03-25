@@ -170,6 +170,7 @@ def get_generations(model_name:str, args, seed=1, old_sequences=None, max_num_ge
         # print("Prompt:", tokenizer.decode(input_ids.cpu()[0], skip_special_tokens=True))
         num_gens = args.num_generations_per_prompt
         all_token_hidden_states_layer_list = {}
+        att_all_token_hidden_states_layer_list = {}
         off_set = 0
         while num_gens > 0:
             dict_outputs =  model.generate(input_ids, attention_mask=batch['attention_mask'].to(device),
@@ -302,6 +303,16 @@ def get_generations(model_name:str, args, seed=1, old_sequences=None, max_num_ge
                     # for hidden_state, attention in zip(hidden_states, attentions):
                     #     all_token_hidden_states_layer[ind + off_set].append(hidden_state[layer][ind, -1, :].detach().cpu().float().numpy())
 
+                if layer not in att_all_token_hidden_states_layer_list:
+                    att_all_token_hidden_states_layer_list[layer] = {}
+                att_all_token_hidden_states_layer_list[layer].update(all_token_hidden_states_layer)
+            for layer in layers_to_process:
+                all_token_hidden_states_layer = {}
+                for ind in range(hidden_states[1][-1].shape[0]):
+                    all_token_hidden_states_layer[ind + off_set] = []
+                    for hidden_state in hidden_states[1:]:
+                        all_token_hidden_states_layer[ind + off_set].append(hidden_state[layer][ind, -1, :].detach().cpu().float().numpy())
+
                 if layer not in all_token_hidden_states_layer_list:
                     all_token_hidden_states_layer_list[layer] = {}
                 all_token_hidden_states_layer_list[layer].update(all_token_hidden_states_layer)
@@ -320,14 +331,21 @@ def get_generations(model_name:str, args, seed=1, old_sequences=None, max_num_ge
         for gen_ids in generations:
             generations_decoded.append(tokenizer.decode(gen_ids, skip_special_tokens=True))
         for layer in layers_to_process:
+            layer_embeddings = att_all_token_hidden_states_layer_list[layer]
+            layer_embeddings_dict = dict(
+                    id=batch['task_id'][0],
+                    layer_embeddings = layer_embeddings,
+                )
+            pd.to_pickle(layer_embeddings_dict, os.path.join(cache_dir, f'all_att_chosen_token_embedding_{task_id_path}_{layer}.pkl'))
+        
+        for layer in layers_to_process:
             layer_embeddings = all_token_hidden_states_layer_list[layer]
             layer_embeddings_dict = dict(
                     id=batch['task_id'][0],
                     layer_embeddings = layer_embeddings,
                 )
-            
-            # print(f'Writing {len(sequences[layer])} generations to {cache_dir}...')
-            pd.to_pickle(layer_embeddings_dict, os.path.join(cache_dir, f'all_att_chosen_token_embedding_{task_id_path}_{layer}.pkl'))
+            pd.to_pickle(layer_embeddings_dict, os.path.join(cache_dir, f'all_token_embedding_{task_id_path}_{layer}.pkl'))
+
         generation_sequences_output = dict(
                 prompt=tokenizer.decode(input_ids.cpu()[0], skip_special_tokens=True),
                 id=batch['task_id'][0],
