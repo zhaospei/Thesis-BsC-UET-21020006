@@ -82,7 +82,7 @@ def main(args):
     kwargs_handlers = [DistributedDataParallelKwargs(find_unused_parameters=True)]
     accelerator = Accelerator(mixed_precision="bf16", kwargs_handlers=kwargs_handlers)
     model_name = args.model_name
-    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+    # tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     sequences = pd.read_parquet(continue_from).to_dict(orient="records")
     print(f"Loaded {len(sequences)} indices")
     batch_size = 24

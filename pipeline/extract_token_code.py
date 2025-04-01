@@ -719,6 +719,87 @@ def process_operator_token():
     
     return
 
+def process_att_token():
+    tokenizer = models.load_tokenizer(args.model_name)
+    if 'chat' or 'instruct' in args.model_name.lower():
+        instruction = True
+    else:
+        instruction = False
+    dataset = get_dataset_fn(args.dataset)(tokenizer, language=args.language, instruction=instruction)
+    dataset_egc = extract_generation_code_fun(args.dataset)
+    # dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False)
+    
+    output_dir = args.generate_dir.replace('temp', 'output')
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    for layer in args.layers:
+        print(f'Processing layer {layer}')
+        results = pd.DataFrame(columns=[
+            "task_id", 
+            "completion_id",
+            "has_error",
+            "att_max_on_context_max_token",
+            "att_max_all_max_token",
+            "lookback_ratio_max_token",
+            "att_max_on_context_min_token",
+            "att_max_all_min_token",
+            "lookback_ratio_min_token",
+            "lookback_ratio_paper",
+            "hidden_states_att_max_on_context_max_token",
+            "hidden_states_att_max_all_max_token",
+            "hidden_states_lookback_ratio_max_token",
+            "hidden_states_att_max_on_context_min_token",
+            "hidden_states_att_max_all_min_token",
+            "hidden_states_lookback_ratio_min_token",
+        ])
+        found_sample = 0
+        for example in tqdm.tqdm(dataset, total=len(dataset)):
+            task_id_path =  str(example['task_id']).replace('/','_').replace('[','_').replace(']','_')
+            if args.dataset == 'mbpp' or args.dataset == 'ds1000':
+                task_id_path = f'tensor({task_id_path})'
+            
+            
+            task_embedding_path = f'all_token_embedding_{task_id_path}_{layer}.pkl'
+            task_embedding_path = os.path.join(args.generate_dir, task_embedding_path)
+            if not os.path.exists(task_embedding_path):
+                print(f'File {task_id_path} {layer} not found. Skipping...')
+                continue
+            found_sample += 1
+            with open(task_embedding_path, 'rb') as f:
+                task_embedding = pickle.load(f)
+            
+            for j in range(len(task_embedding['generations'])):
+                task_id = example['task_id']
+                completion_id = str(task_id) + '_' + str(j)
+                layer_embedding = task_embedding['layer_embeddings'][j][0]
+                
+                results = results._append({
+                    "task_id": task_id, 
+                    "completion_id": completion_id,
+                    "has_error": layer_embedding['has_error'],
+                    "att_max_on_context_max_token": layer_embedding['att_max_on_context_max_token'],
+                    "att_max_all_max_token": layer_embedding['att_max_all_max_token'],
+                    "lookback_ratio_max_token": layer_embedding['lookback_ratio_max_token'],
+                    "att_max_on_context_min_token": layer_embedding['att_max_on_context_min_token'],
+                    "att_max_all_min_token": layer_embedding['att_max_all_min_token'],
+                    "lookback_ratio_min_token": layer_embedding['lookback_ratio_min_token'],
+                    "hidden_states_att_max_on_context_max_token": layer_embedding['hidden_states_att_max_on_context_max_token'],
+                    "hidden_states_att_max_all_max_token": layer_embedding['hidden_states_att_max_all_max_token'],
+                    "hidden_states_lookback_ratio_max_token": layer_embedding['hidden_states_lookback_ratio_max_token'],
+                    "hidden_states_att_max_on_context_min_token": layer_embedding['hidden_states_att_max_on_context_min_token'],
+                    "hidden_states_att_max_all_min_token": layer_embedding['hidden_states_att_max_all_min_token'],
+                    "hidden_states_lookback_ratio_min_token": layer_embedding['hidden_states_lookback_ratio_min_token'],
+                }, 
+                ignore_index=True)
+        
+        print(f'Found {found_sample} / {len(dataset)}')
+        model_name = args.model_name.replace('/', '_')
+        results.to_parquet(os.path.join(output_dir, f'att_token_embedding_{args.dataset}_{model_name}_{layer}.parquet'))
+    
+    return
+
+
 if __name__ == '__main__':
     if args.type == 'LFCLF':
         process_lfclf()
@@ -730,5 +811,7 @@ if __name__ == '__main__':
         process_min_prob_token_line()
     elif args.type == 'operator_token':
         process_operator_token()
+    elif args.type == 'att_token':
+        process_att_token()
     else:
         raise ValueError(f"Unknown type {args.type}")

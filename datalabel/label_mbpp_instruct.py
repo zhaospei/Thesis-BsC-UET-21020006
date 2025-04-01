@@ -76,11 +76,11 @@ import os
 from benchmark.MBPP.human_eval.evaluation import evaluate_functional_correctness_each_sample
 
 data_root = "/drive2/tuandung/WCODELLM/benchmark/MBPP/data"
-continue_from = '/drive2/tuandung/WCODELLM/vastai/deepseekcoder-6.7b-instruct/mbpp/LFCLF_embedding_mbpp_deepseek-ai_deepseek-coder-6.7b-instruct_32_label.parquet'
+continue_from = '/drive2/tuandung/WCODELLM/jaist/final/LFCLF_embedding_mbpp_deepseek-ai_deepseek-coder-6.7b-instruct_32.parquet'
 kwargs_handlers = [DistributedDataParallelKwargs(find_unused_parameters=True)]
 accelerator = Accelerator(mixed_precision="bf16", kwargs_handlers=kwargs_handlers)
 model_name = 'deepseek-ai/deepseek-coder-6.7b-instruct'
-tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+# tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
 sequences = pd.read_parquet(continue_from).to_dict(orient='records')
 print(f'Loaded {len(sequences)} indices')
 batch_size = 8
@@ -123,16 +123,16 @@ for idx in tqdm(range(0, len(sequences), batch_size)):
         tmpfile.write(json.dumps(res) + "\n")
         tmpfile.flush()
         currentnum += 1
-    # results = evaluate_functional_correctness_each_sample(input_file=log_file, problem_file=os.path.join(data_root, f"mbpp_test.jsonl"), tmp_dir=log_dir, language=runlang, n_workers=8, is_mbpp=True)
+    results = evaluate_functional_correctness_each_sample(input_file=log_file, problem_file=os.path.join(data_root, f"mbpp_test.jsonl"), tmp_dir=log_dir, language=runlang, n_workers=8, is_mbpp=True)
     # results = evaluate_functional_correctness_each_sample(input_file=log_file, problem_file=os.path.join(data_root, f"humaneval-{language}.jsonl"), tmp_dir=log_dir, timeout=timeout, language=runlang, n_workers=8)
     
     
     # print("Prompt", batch_lines[0]['prompt'])
     for line in batch_lines:
         cleaned_output_results.append(line['generation'])
-        # test_run_results.append(results[line['completion_id']][0][1]['passed'])
-        # if results[line['completion_id']][0][1]['passed']:
-            # totalpass += 1
+        test_run_results.append(results[line['completion_id']][0][1]['passed'])
+        if results[line['completion_id']][0][1]['passed']:
+            totalpass += 1
     print(f"Total pass: {totalpass}, Current num: {currentnum}")
     # currentnum += len(batch_lines)
     tmpfile.close()
@@ -140,9 +140,9 @@ for idx in tqdm(range(0, len(sequences), batch_size)):
         total_samples.append(line)
     
 results = pd.DataFrame(sequences)
-# results['label'] = test_run_results
+results['label'] = test_run_results
 results['cleaned_code'] = cleaned_output_results
 
 print(totalpass)
 print(totalnum)
-results.to_parquet(continue_from.replace(".parquet", "_cleaned_code.parquet"))
+results.to_parquet(continue_from.replace(".parquet", "_label.parquet"))
