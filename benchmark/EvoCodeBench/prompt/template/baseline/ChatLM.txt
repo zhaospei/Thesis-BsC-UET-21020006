@@ -1,8 +1,0 @@
-Please complete the {function_name} function in the given Python code.
-
-Input Code:
-```Python
-{input_code}
-```
-
-Completed Code:

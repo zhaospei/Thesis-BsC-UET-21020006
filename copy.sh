@@ -1,1 +1,0 @@
- scp /home/trang-n/WCODELLM_MULTILANGUAGE/output/Qwen_Qwen2.5-Coder-3B-Instruct_mbpp_python_1_12_18_24_28_32_36/output2/LFCLF_embedding_mbpp_Qwen_Qwen2.5-Coder-3B-Instruct_36.parquet dungbt@112.137.129.161:/drive2/tuandung/WCODELLM/output/
